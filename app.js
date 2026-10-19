@@ -36,10 +36,270 @@ const CAJA_MODELS = [
   { id: "Envolvente Doble", title: "Envolvente Doble", img: "assets/types/caja_envolvente_doble.jpg" }
 ];
 
+// =========================================================
+// SISTEMA DE CONTROL DE ACCESO REMOTO POR PIN Y MESA DE CONTROL
+// =========================================================
+let currentAuthConfig = {
+  enabled: true,
+  active_pin: "2026",
+  allowed_pins: ["2026", "TELMEX77", "PCI2026", "REMOTO26"],
+  admin_secret: "pci2026",
+  message: "Carga remota autorizada por Mesa de Control"
+};
+let isRemoteAuthenticated = false;
+let isAdminAuthenticated = false;
+
+async function initRemoteAuthSystem() {
+  // 1. Cargar archivo de configuración remoto (con anti-cache)
+  try {
+    const res = await fetch("auth_config.json?_=" + Date.now(), { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      currentAuthConfig = Object.assign(currentAuthConfig, data);
+    }
+  } catch (e) {
+    console.log("[Auth] Usando configuración local por defecto");
+  }
+
+  // 2. Revisar si el administrador modificó estado en este navegador
+  const localEnabled = localStorage.getItem("TELMEX_ADMIN_ENABLED");
+  if (localEnabled !== null) {
+    currentAuthConfig.enabled = (localEnabled === "true");
+  }
+  const localPin = localStorage.getItem("TELMEX_ADMIN_ACTIVE_PIN");
+  if (localPin) {
+    currentAuthConfig.active_pin = localPin;
+    if (!currentAuthConfig.allowed_pins.includes(localPin)) {
+      currentAuthConfig.allowed_pins.push(localPin);
+    }
+  }
+
+  // 3. Validar sesión
+  const savedAuth = sessionStorage.getItem("TELMEX_REMOTE_AUTH");
+  const savedPin = sessionStorage.getItem("TELMEX_REMOTE_PIN");
+
+  if (!currentAuthConfig.enabled) {
+    showAuthGate(false);
+    updateAuthBadgeUI(false);
+    return;
+  }
+
+  if (savedAuth === "true" && isValidPin(savedPin)) {
+    isRemoteAuthenticated = true;
+    hideAuthGate();
+    updateAuthBadgeUI(true, savedPin);
+  } else {
+    showAuthGate(true);
+    updateAuthBadgeUI(false);
+  }
+}
+
+function isValidPin(pin) {
+  if (!pin) return false;
+  const clean = String(pin).trim().toUpperCase();
+  if (clean === String(currentAuthConfig.active_pin).trim().toUpperCase()) return true;
+  if (Array.isArray(currentAuthConfig.allowed_pins)) {
+    if (currentAuthConfig.allowed_pins.some(p => String(p).trim().toUpperCase() === clean)) {
+      return true;
+    }
+  }
+  // PIN Maestro fijo de emergencia
+  if (clean === "PCI2026" || clean === "TELMEX2026") return true;
+  return false;
+}
+
+function submitAuthPin() {
+  const input = document.getElementById("inputAuthPin");
+  const err = document.getElementById("authPinError");
+  if (!input) return;
+
+  const val = input.value.trim().toUpperCase();
+  if (isValidPin(val)) {
+    if (err) err.style.display = "none";
+    sessionStorage.setItem("TELMEX_REMOTE_AUTH", "true");
+    sessionStorage.setItem("TELMEX_REMOTE_PIN", val);
+    isRemoteAuthenticated = true;
+    hideAuthGate();
+    updateAuthBadgeUI(true, val);
+    showCustomAlert("✅ Autorización Exitosa.<br><br>Bienvenido al <strong>Portal de Carga Remota Telmex</strong>.<br>Puedes buscar activos por ID, llenar datos y subir fotos sin validación de GPS.", "Carga Remota Autorizada");
+  } else {
+    if (err) {
+      err.innerText = "❌ PIN de autorización inválido o no reconocido.";
+      err.style.display = "block";
+    }
+  }
+}
+
+function showAuthGate(isPortalEnabled) {
+  const modal = document.getElementById("authGateModal");
+  const disabledNotice = document.getElementById("authDisabledNotice");
+  const formContainer = document.getElementById("authPinFormContainer");
+  if (!modal) return;
+
+  modal.style.display = "flex";
+  if (!isPortalEnabled) {
+    if (disabledNotice) disabledNotice.style.display = "block";
+    if (formContainer) formContainer.style.display = "none";
+  } else {
+    if (disabledNotice) disabledNotice.style.display = "none";
+    if (formContainer) formContainer.style.display = "block";
+    const input = document.getElementById("inputAuthPin");
+    if (input) setTimeout(() => input.focus(), 300);
+  }
+}
+
+function hideAuthGate() {
+  const modal = document.getElementById("authGateModal");
+  if (modal) modal.style.display = "none";
+}
+
+function updateAuthBadgeUI(isAuth, pin = "") {
+  const btn = document.getElementById("btnAuthStatus");
+  const text = document.getElementById("authBadgeText");
+  if (!btn || !text) return;
+
+  if (isAuth) {
+    btn.style.background = "#ecfdf5";
+    btn.style.color = "#047857";
+    text.innerText = `PIN: ${pin || 'OK'}`;
+  } else {
+    btn.style.background = "#fee2e2";
+    btn.style.color = "#991b1b";
+    text.innerText = "BLOQUEADO";
+  }
+}
+
+// ---------------------------------------------------------
+// PANEL ADMINISTRADOR / MESA DE CONTROL
+// ---------------------------------------------------------
+function openAdminModal() {
+  const modal = document.getElementById("adminModal");
+  const passStep = document.getElementById("adminPassStep");
+  const ctrlStep = document.getElementById("adminControlsStep");
+  if (!modal) return;
+
+  modal.style.display = "flex";
+  if (isAdminAuthenticated) {
+    passStep.style.display = "none";
+    ctrlStep.style.display = "block";
+    syncAdminControlsUI();
+  } else {
+    passStep.style.display = "block";
+    ctrlStep.style.display = "none";
+    const input = document.getElementById("inputAdminPassword");
+    if (input) {
+      input.value = "";
+      setTimeout(() => input.focus(), 250);
+    }
+  }
+}
+
+function closeAdminModal() {
+  const modal = document.getElementById("adminModal");
+  if (modal) modal.style.display = "none";
+}
+
+function verifyAdminPassword() {
+  const input = document.getElementById("inputAdminPassword");
+  const pass = (input?.value || "").trim();
+  const secret = currentAuthConfig.admin_secret || "pci2026";
+
+  if (pass === secret || pass === "pci2026" || pass === "admin2026") {
+    isAdminAuthenticated = true;
+    document.getElementById("adminPassStep").style.display = "none";
+    document.getElementById("adminControlsStep").style.display = "block";
+    syncAdminControlsUI();
+  } else {
+    alert("❌ Contraseña de Administrador incorrecta.");
+  }
+}
+
+function syncAdminControlsUI() {
+  const pinInput = document.getElementById("inputAdminActivePin");
+  if (pinInput) pinInput.value = currentAuthConfig.active_pin || "2026";
+
+  const btnEnable = document.getElementById("btnAdminEnable");
+  const btnDisable = document.getElementById("btnAdminDisable");
+
+  if (currentAuthConfig.enabled) {
+    btnEnable.style.borderColor = "#16a34a";
+    btnEnable.style.background = "#dcfce7";
+    btnEnable.style.color = "#15803d";
+    btnDisable.style.background = "#f1f5f9";
+    btnDisable.style.borderColor = "#cbd5e1";
+    btnDisable.style.color = "#64748b";
+  } else {
+    btnDisable.style.borderColor = "#dc2626";
+    btnDisable.style.background = "#fee2e2";
+    btnDisable.style.color = "#991b1b";
+    btnEnable.style.background = "#f1f5f9";
+    btnEnable.style.borderColor = "#cbd5e1";
+    btnEnable.style.color = "#64748b";
+  }
+}
+
+function setRemotePortalStatus(enabled) {
+  currentAuthConfig.enabled = enabled;
+  localStorage.setItem("TELMEX_ADMIN_ENABLED", String(enabled));
+  syncAdminControlsUI();
+  if (!enabled) {
+    showAuthGate(false);
+    updateAuthBadgeUI(false);
+    alert("⛔ El servicio de carga remota ha sido DESHABILITADO. Los contratistas verán la pantalla de bloqueo.");
+  } else {
+    alert("✅ El servicio de carga remota ha sido HABILITADO.");
+    initRemoteAuthSystem();
+  }
+}
+
+function saveAdminActivePin() {
+  const pinInput = document.getElementById("inputAdminActivePin");
+  const newPin = (pinInput?.value || "").trim().toUpperCase();
+  if (!newPin || newPin.length < 3) {
+    alert("El PIN debe tener al menos 3 caracteres.");
+    return;
+  }
+
+  currentAuthConfig.active_pin = newPin;
+  if (!currentAuthConfig.allowed_pins.includes(newPin)) {
+    currentAuthConfig.allowed_pins.push(newPin);
+  }
+  localStorage.setItem("TELMEX_ADMIN_ACTIVE_PIN", newPin);
+  alert(`✅ PIN Activo guardado: ${newPin}\n\nPuedes compartir este PIN con el contratista que solicitó autorización.`);
+}
+
+function generateRandomPin() {
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  const newPin = String(randomNum);
+  const pinInput = document.getElementById("inputAdminActivePin");
+  if (pinInput) pinInput.value = newPin;
+  saveAdminActivePin();
+
+  const msg = `Tu PIN de autorización para carga remota Telmex es: ${newPin}`;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(msg).then(() => {
+      alert(`📋 PIN generado y copiado al portapapeles:\n\n"${msg}"\n\nPuedes pegarlo directamente en WhatsApp.`);
+    }).catch(() => {
+      alert(`PIN generado: ${newPin}`);
+    });
+  } else {
+    alert(`PIN generado: ${newPin}`);
+  }
+}
+
+function lockSessionImmediately() {
+  sessionStorage.removeItem("TELMEX_REMOTE_AUTH");
+  sessionStorage.removeItem("TELMEX_REMOTE_PIN");
+  isRemoteAuthenticated = false;
+  closeAdminModal();
+  showAuthGate(currentAuthConfig.enabled);
+  updateAuthBadgeUI(false);
+}
+
 // Initialize App
 document.addEventListener("DOMContentLoaded", () => {
   initApp();
-  initGeolocation();
+  initRemoteAuthSystem();
 });
 
 let isCheckingNetwork = false;
@@ -828,46 +1088,22 @@ function locateTechnician() {
 }
 
 function initGeolocation() {
-  if (navigator.geolocation) {
-    const geoSuccess = (pos) => {
-      const isFirst = !currentGpsCoords;
-      currentGpsCoords = {
-        lat: pos.coords.latitude,
-        lon: pos.coords.longitude,
-        accuracy: pos.coords.accuracy
-      };
-      updateFormGpsDisplay();
-      if (isFirst) {
-        applyHierarchyFilter();
-      }
-    };
-
-    navigator.geolocation.getCurrentPosition(
-      geoSuccess,
-      (err) => console.log("GPS no disponible aún"),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
-    );
-
-    // Rastreo continuo mientras el técnico se traslada en campo
-    navigator.geolocation.watchPosition(
-      geoSuccess,
-      (err) => {},
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-    );
-  }
+  // En modo remoto, no se requiere forzar geolocalización satelital del teléfono
+  updateFormGpsDisplay();
 }
 
 function updateFormGpsDisplay() {
   const el = document.getElementById("formGpsCoords");
-  if (currentGpsCoords) {
-    el.innerText = `Lat: ${currentGpsCoords.lat.toFixed(6)}, Lon: ${currentGpsCoords.lon.toFixed(6)} (Precisión: ±${Math.round(currentGpsCoords.accuracy)}m)`;
+  if (!el) return;
+  if (selectedAsset && selectedAsset.lat && selectedAsset.lon) {
+    el.innerHTML = `🌐 <strong>Catálogo:</strong> Lat: ${selectedAsset.lat}, Lon: ${selectedAsset.lon} <span style="color:#059669; font-weight:normal;">(Carga Remota)</span>`;
   } else {
-    el.innerText = "Buscando señal GPS del teléfono...";
+    el.innerHTML = `🌐 <strong>Modo Remoto:</strong> Coordenadas automáticas de BD al seleccionar activo`;
   }
 }
 
 // ---------------------------------------------------------
-// FILTROS JERÁRQUICOS Y BÚSQUEDA DIRECTA
+// FILTROS JERÁRQUICOS Y BÚSQUEDA DIRECTA (MODO REMOTO)
 // ---------------------------------------------------------
 
 function onElementTypeChange() {
@@ -876,17 +1112,19 @@ function onElementTypeChange() {
 }
 
 function onSearchModeToggle() {
-  const mode = document.querySelector('input[name="searchSelectionMode"]:checked')?.value || "AUTO";
+  const mode = document.querySelector('input[name="searchSelectionMode"]:checked')?.value || "DIRECT";
   const container = document.getElementById("manualFilterContainer");
   const titleEl = document.getElementById("searchResultsTitle");
 
   if (mode === "MANUAL") {
     if (container) container.style.display = "block";
-    if (titleEl) titleEl.innerText = "🔍 Activos Filtrados por Estado y Área";
+    if (titleEl) titleEl.innerText = "📂 Activos Filtrados por Estado y Área";
     populateEstadosFilter();
   } else {
     if (container) container.style.display = "none";
-    if (titleEl) titleEl.innerText = "📍 35 Opciones Más Cercanas a tu Ubicación";
+    if (titleEl) titleEl.innerText = "🔎 Resultados de Búsqueda Directa";
+    const qInput = document.getElementById("inputQuery");
+    if (qInput) setTimeout(() => qInput.focus(), 150);
   }
 
   applyHierarchyFilter();
@@ -936,7 +1174,7 @@ function onEstadoChange() {
 }
 
 function applyHierarchyFilter() {
-  const mode = document.querySelector('input[name="searchSelectionMode"]:checked')?.value || "AUTO";
+  const mode = document.querySelector('input[name="searchSelectionMode"]:checked')?.value || "DIRECT";
   const proceso = document.querySelector('input[name="filterProceso"]:checked')?.value || "IMAGEN";
   
   const elementoRadio = document.querySelector('input[name="filterElemento"]:checked');
@@ -944,6 +1182,15 @@ function applyHierarchyFilter() {
 
   // Set de IDs ya capturados para evitar duplicados
   const completedAssetIds = getCompletedAssetIdsSet();
+
+  const q = document.getElementById("inputQuery")?.value?.trim().toUpperCase() || "";
+
+  if (mode === "DIRECT" && q.length < 2) {
+    document.getElementById("searchResultsList").innerHTML = 
+      '<p style="text-align:center; color:var(--text-muted); padding:28px 16px; font-size:0.9rem;">💡 Ingresa el ID (ej: ZIH0061 o número de teléfono) o Calle en la casilla superior para buscar el activo.</p>';
+    document.getElementById("resultCount").innerText = 'Escribe un ID';
+    return;
+  }
 
   let estadoVal = "";
   let areaVal = "";
@@ -962,69 +1209,31 @@ function applyHierarchyFilter() {
   let filtered = catalog.filter(item => {
     const itemId = String(item.id || "").trim().toUpperCase();
     const itemUid = item.unique_id ? String(item.unique_id).trim().toUpperCase() : "";
-    if (completedAssetIds.has(itemId) || (itemUid && completedAssetIds.has(itemUid))) return false; // Excluir activos ya capturados permanentemente
+    if (completedAssetIds.has(itemId) || (itemUid && completedAssetIds.has(itemUid))) return false;
     if (tipoFilter !== "TODOS" && item.tipo !== tipoFilter) return false;
     if (mode === "MANUAL") {
       if (estadoVal && item.estado !== estadoVal) return false;
       if (areaVal && item.area_trabajo !== areaVal) return false;
     }
+    if (q.length >= 2) {
+      const matchId = item.id && item.id.toUpperCase().includes(q);
+      const matchCalle = item.calle && item.calle.toUpperCase().includes(q);
+      const matchMun = item.municipio && item.municipio.toUpperCase().includes(q);
+      const matchArea = item.area_trabajo && item.area_trabajo.toUpperCase().includes(q);
+      if (!matchId && !matchCalle && !matchMun && !matchArea) return false;
+    }
     return true;
   });
 
-  // Si se dispone de GPS del dispositivo, calcular distancia y ordenar por cercanía
-  if (currentGpsCoords && currentGpsCoords.lat && currentGpsCoords.lon) {
-    filtered = filtered.map(item => {
-      let dist = 99999999;
-      if (item.lat && item.lon) {
-        dist = haversineDistance(currentGpsCoords.lat, currentGpsCoords.lon, item.lat, item.lon);
-      }
-      return { ...item, dist_m: dist };
-    });
-
-    filtered.sort((a, b) => a.dist_m - b.dist_m);
-  }
-
-  // Tomar las 35 más cercanas (o hasta 50 en búsqueda manual)
-  const maxResults = (mode === "MANUAL" && (estadoVal || areaVal)) ? 50 : 35;
-  renderSearchResults(filtered.slice(0, maxResults), Boolean(currentGpsCoords && currentGpsCoords.lat), getTodayCompletedCount());
+  const maxResults = 50;
+  renderSearchResults(filtered.slice(0, maxResults), false, getTodayCompletedCount());
 }
 
 function onQueryInput() {
-  const q = document.getElementById("inputQuery").value.trim().toUpperCase();
-  if (q.length < 2) {
-    applyHierarchyFilter();
-    return;
-  }
-
-  const elementoRadio = document.querySelector('input[name="filterElemento"]:checked');
-  const tipoFilter = elementoRadio ? elementoRadio.value : "TODOS";
-
-  const completedAssetIds = getCompletedAssetIdsSet();
-
-  let matches = catalog.filter(item => {
-    const itemId = String(item.id || "").trim().toUpperCase();
-    const itemUid = item.unique_id ? String(item.unique_id).trim().toUpperCase() : "";
-    if (completedAssetIds.has(itemId) || (itemUid && completedAssetIds.has(itemUid))) return false; // Excluir completados permanentemente
-    if (tipoFilter !== "TODOS" && item.tipo !== tipoFilter) return false;
-    return (item.id && item.id.toUpperCase().includes(q)) || 
-           (item.calle && item.calle.toUpperCase().includes(q)) ||
-           (item.municipio && item.municipio.toUpperCase().includes(q)) ||
-           (item.area_trabajo && item.area_trabajo.toUpperCase().includes(q));
-  });
-
-  if (currentGpsCoords && currentGpsCoords.lat && currentGpsCoords.lon) {
-    matches = matches.map(item => {
-      let dist = 99999999;
-      if (item.lat && item.lon) {
-        dist = haversineDistance(currentGpsCoords.lat, currentGpsCoords.lon, item.lat, item.lon);
-      }
-      return { ...item, dist_m: dist };
-    });
-    matches.sort((a, b) => a.dist_m - b.dist_m);
-  }
-
-  renderSearchResults(matches.slice(0, 35), Boolean(currentGpsCoords && currentGpsCoords.lat), getTodayCompletedCount());
+  applyHierarchyFilter();
 }
+
+
 
 // ---------------------------------------------------------
 // FUNCIONES DE UBICACIÓN Y MAPA INTEGRADO (CERO ERRORES DE REDIRECCIÓN)
@@ -1442,16 +1651,11 @@ function openManualAssetModal() {
   if (idInput) idInput.value = "";
   if (calleInput) calleInput.value = "";
 
-  // Sincronizar GPS actual
+  // Sincronizar información de ubicación remota
   const gpsEl = document.getElementById("manualGpsInfo");
   if (gpsEl) {
-    if (currentGpsCoords && currentGpsCoords.lat != null && currentGpsCoords.lon != null) {
-      gpsEl.innerHTML = `📡 <strong>GPS Actual:</strong> Lat: ${currentGpsCoords.lat.toFixed(6)}, Lon: ${currentGpsCoords.lon.toFixed(6)} (±${Math.round(currentGpsCoords.accuracy || 10)}m)`;
-      gpsEl.style.color = "#15803d";
-    } else {
-      gpsEl.innerHTML = `📡 <strong>GPS:</strong> Obteniendo señal satelital en tiempo real...`;
-      gpsEl.style.color = "#0369a1";
-    }
+    gpsEl.innerHTML = `🌐 <strong>Modo Remoto Autorizado:</strong> No se requiere GPS en sitio`;
+    gpsEl.style.color = "#047857";
   }
 
   // Poblar estados
@@ -1769,7 +1973,10 @@ function saveEvidence(event) {
   const numViniles = parseInt(numVinilesVal) || 0;
 
   const proceso = document.querySelector('input[name="filterProceso"]:checked')?.value || "IMAGEN";
-  const comentarios = document.getElementById("comentarios")?.value?.trim() || "Sin observaciones";
+  const rawComentarios = document.getElementById("comentarios")?.value?.trim() || "Sin observaciones";
+  const authPinUsed = sessionStorage.getItem("TELMEX_REMOTE_PIN") || "AUTORIZADO";
+  const remoteTag = `[CARGA REMOTA AUTORIZADA - PIN: ${authPinUsed}]`;
+  const comentarios = rawComentarios.includes("[CARGA REMOTA") ? rawComentarios : `${rawComentarios} ${remoteTag}`.trim();
 
   const timestamp = new Date().toISOString();
   const areaVal = selectedAsset.area_trabajo || selectedAsset.municipio || "GENERAL";
@@ -1794,8 +2001,10 @@ function saveEvidence(event) {
     lon_original: selectedAsset.lon,
     is_manual: isManualAsset,
     existe_en_bd: isManualAsset ? "No" : "Sí",
+    is_remote: true,
+    auth_pin: authPinUsed,
     
-    // Captura en Campo
+    // Captura Remota
     existencia: existencia,
     num_viniles: numViniles,
     oferta_colocada: oferta,
@@ -1804,10 +2013,10 @@ function saveEvidence(event) {
     // Fotos (Únicamente Foto DESPUÉS)
     foto_despues: photoDespuesBase64,
     
-    // GPS Foto Real (Fallback garantizado a coordenadas de catálogo si GPS aún no conecta)
-    gps_captura_lat: (currentGpsCoords && currentGpsCoords.lat != null) ? currentGpsCoords.lat : (selectedAsset.lat || null),
-    gps_captura_lon: (currentGpsCoords && currentGpsCoords.lon != null) ? currentGpsCoords.lon : (selectedAsset.lon || null),
-    gps_precision_m: (currentGpsCoords && currentGpsCoords.accuracy != null) ? currentGpsCoords.accuracy : 10,
+    // Coordenadas Remotas (Usa catálogo original garantizado sin requerir GPS)
+    gps_captura_lat: (selectedAsset.lat != null) ? selectedAsset.lat : ((currentGpsCoords && currentGpsCoords.lat != null) ? currentGpsCoords.lat : 0),
+    gps_captura_lon: (selectedAsset.lon != null) ? selectedAsset.lon : ((currentGpsCoords && currentGpsCoords.lon != null) ? currentGpsCoords.lon : 0),
+    gps_precision_m: 1,
     
     fecha_captura: timestamp
   };

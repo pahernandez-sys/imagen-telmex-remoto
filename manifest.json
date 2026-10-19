@@ -1,7 +1,7 @@
 {
-  "name": "Imagen Telmex 2026",
-  "short_name": "Imagen Telmex 2026",
-  "description": "Aplicación Móvil Offline-First para la Campaña Imagen Telmex 2026",
+  "name": "Telmex 2026 - Carga Remota",
+  "short_name": "Telmex Remoto",
+  "description": "Portal de Carga Remota de Evidencias Telmex 2026 (Sin GPS)",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0055a5",

@@ -1,0 +1,8 @@
+{
+  "enabled": true,
+  "active_pin": "2026",
+  "allowed_pins": ["2026", "TELMEX77", "PCI2026", "REMOTO26"],
+  "updated_at": "2026-10-19T11:30:00Z",
+  "message": "Carga remota autorizada por Mesa de Control",
+  "admin_secret": "pci2026"
+}
