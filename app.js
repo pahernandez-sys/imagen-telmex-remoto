@@ -36,6 +36,99 @@ const CAJA_MODELS = [
   { id: "Envolvente Doble", title: "Envolvente Doble", img: "assets/types/caja_envolvente_doble.jpg" }
 ];
 
+// Catálogo Oficial de Estados y Áreas de Trabajo (Garantiza opciones en iPhone y offline)
+const OFFICIAL_ESTADOS_AREAS = {
+  "AGUASCALIENTES": ["AGUASCALIENTES"],
+  "BAJA CALIFORNIA": ["ENSENADA", "MEXICALI", "TIJUANA", "TELNOR"],
+  "BAJA CALIFORNIA SUR": ["LA PAZ"],
+  "CHIAPAS": ["CHIAPAS"],
+  "CHIHUAHUA": ["CHIHUAHUA", "CIUDAD JUAREZ"],
+  "CIUDAD DE MEXICO": ["CIUDAD DE MEXICO", "CDMX CENTRO", "CDMX NORTE", "CDMX SUR", "CDMX ORIENTE", "CDMX PONIENTE"],
+  "COAHUILA": ["TORREON", "SABINAS"],
+  "COLIMA": ["COLIMA"],
+  "DURANGO": ["DURANGO"],
+  "ESTADO DE MEXICO": ["TOLUCA", "ESTADO DE MEXICO SUR"],
+  "GUANAJUATO": ["CELAYA", "IRAPUATO", "LEON"],
+  "GUERRERO": ["ACAPULCO", "CHILPANCINGO"],
+  "HIDALGO": ["HIDALGO"],
+  "JALISCO": ["GUADALAJARA", "GUADALAJARA CENTRO", "GUADALAJARA ORIENTE", "JALISCO", "PUERTO VALLARTA"],
+  "MICHOACAN": ["MICHOACAN", "MORELIA"],
+  "MORELOS": ["MORELOS"],
+  "NAYARIT": ["NAYARIT"],
+  "NUEVO LEON": ["MONTERREY"],
+  "OAXACA": ["OAXACA"],
+  "PUEBLA": ["PUEBLA"],
+  "QUERETARO": ["QUERETARO"],
+  "QUINTANA ROO": ["QUINTANA ROO", "QUINTANA ROO NORTE", "QUINTANA ROO SUR"],
+  "SAN LUIS POTOSI": ["SAN LUIS POTOSI"],
+  "SINALOA": ["CULIACAN", "MAZATLAN"],
+  "SONORA": ["CIUDAD OBREGON-LOS MOCH", "HERMOSILLO", "NOGALES"],
+  "TABASCO": ["TABASCO"],
+  "TAMAULIPAS": ["CIUDAD VICTORIA", "MATAMOROS-REYNOSA", "NUEVO LAREDO", "TAMPICO"],
+  "TLAXCALA": ["TLAXCALA"],
+  "VERACRUZ": ["COATZACOALCOS", "CORDOBA", "JALAPA", "POZA RICA", "VERACRUZ"],
+  "YUCATAN": ["YUCATAN"]
+};
+
+// Coordenadas oficiales de respaldo por Área (Evita lat:0, lon:0 cuando el dispositivo no tiene GPS activo)
+const AREA_COORDINATES_MAP = {
+  "MORELOS": { lat: 18.9242, lon: -99.2216 },
+  "TOLUCA": { lat: 19.2925, lon: -99.6569 },
+  "GUADALAJARA": { lat: 20.6767, lon: -103.3475 },
+  "GUADALAJARA CENTRO": { lat: 20.6767, lon: -103.3475 },
+  "GUADALAJARA ORIENTE": { lat: 20.6550, lon: -103.2950 },
+  "MONTERREY": { lat: 25.6866, lon: -100.3161 },
+  "QUERETARO": { lat: 20.5888, lon: -100.3899 },
+  "ESTADO DE MEXICO SUR": { lat: 19.1570, lon: -100.1470 },
+  "PUEBLA": { lat: 19.0414, lon: -98.2063 },
+  "LEON": { lat: 21.1221, lon: -101.6826 },
+  "CIUDAD JUAREZ": { lat: 31.6904, lon: -106.4245 },
+  "TORREON": { lat: 25.5428, lon: -103.4068 },
+  "HIDALGO": { lat: 20.0911, lon: -98.7624 },
+  "NAYARIT": { lat: 21.5042, lon: -104.8946 },
+  "CIUDAD OBREGON-LOS MOCH": { lat: 27.4864, lon: -109.9408 },
+  "VERACRUZ": { lat: 19.1738, lon: -96.1342 },
+  "SAN LUIS POTOSI": { lat: 22.1565, lon: -100.9855 },
+  "YUCATAN": { lat: 20.9674, lon: -89.5926 },
+  "MICHOACAN": { lat: 19.7060, lon: -101.1950 },
+  "MORELIA": { lat: 19.7060, lon: -101.1950 },
+  "AGUASCALIENTES": { lat: 21.8853, lon: -102.2916 },
+  "CHIAPAS": { lat: 16.7569, lon: -93.1292 },
+  "CHIHUAHUA": { lat: 28.6330, lon: -106.0691 },
+  "TABASCO": { lat: 17.9892, lon: -92.9281 },
+  "CULIACAN": { lat: 24.8091, lon: -107.3940 },
+  "ACAPULCO": { lat: 16.8531, lon: -99.8237 },
+  "HERMOSILLO": { lat: 29.0729, lon: -110.9559 },
+  "JALAPA": { lat: 19.5438, lon: -96.9102 },
+  "TAMPICO": { lat: 22.2331, lon: -97.8611 },
+  "QUINTANA ROO": { lat: 21.1619, lon: -86.8515 },
+  "QUINTANA ROO NORTE": { lat: 21.1619, lon: -86.8515 },
+  "QUINTANA ROO SUR": { lat: 18.5141, lon: -88.3038 },
+  "MATAMOROS-REYNOSA": { lat: 25.8690, lon: -97.5027 },
+  "DURANGO": { lat: 24.0277, lon: -104.6532 },
+  "OAXACA": { lat: 17.0732, lon: -96.7266 },
+  "IRAPUATO": { lat: 20.6736, lon: -101.3563 },
+  "MAZATLAN": { lat: 23.2494, lon: -106.4111 },
+  "CELAYA": { lat: 20.5222, lon: -100.8123 },
+  "PUERTO VALLARTA": { lat: 20.6534, lon: -105.2253 },
+  "COATZACOALCOS": { lat: 18.1353, lon: -94.4589 },
+  "NUEVO LAREDO": { lat: 27.4862, lon: -99.5073 },
+  "COLIMA": { lat: 19.2452, lon: -103.7247 },
+  "LA PAZ": { lat: 24.1426, lon: -110.3128 },
+  "TLAXCALA": { lat: 19.3182, lon: -98.2375 },
+  "CHILPANCINGO": { lat: 17.5516, lon: -99.5005 },
+  "CIUDAD VICTORIA": { lat: 23.7417, lon: -99.1459 },
+  "CORDOBA": { lat: 18.8944, lon: -96.9353 },
+  "JALISCO": { lat: 20.6767, lon: -103.3475 },
+  "NOGALES": { lat: 31.3086, lon: -110.9422 },
+  "POZA RICA": { lat: 20.5332, lon: -97.4595 },
+  "SABINAS": { lat: 27.8547, lon: -101.1206 },
+  "ENSENADA": { lat: 31.8667, lon: -116.5964 },
+  "MEXICALI": { lat: 32.6245, lon: -115.4523 },
+  "TIJUANA": { lat: 32.5149, lon: -117.0382 },
+  "TELNOR": { lat: 32.5149, lon: -117.0382 }
+};
+
 // =========================================================
 // SISTEMA DE CONTROL DE ACCESO REMOTO POR PIN Y MESA DE CONTROL
 // =========================================================
@@ -1135,10 +1228,14 @@ function populateEstadosFilter() {
   if (!select) return;
   
   const currentVal = select.value;
-  const estadosSet = new Set();
-  catalog.forEach(item => {
-    if (item.estado) estadosSet.add(item.estado);
-  });
+  const estadosSet = new Set(Object.keys(OFFICIAL_ESTADOS_AREAS));
+  if (Array.isArray(catalog)) {
+    catalog.forEach(item => {
+      if (item.estado && item.estado !== "DESCONOCIDO" && item.estado !== "GENERAL") {
+        estadosSet.add(item.estado);
+      }
+    });
+  }
 
   select.innerHTML = '<option value="">-- Seleccionar Estado --</option>';
   Array.from(estadosSet).sort().forEach(est => {
@@ -1159,9 +1256,16 @@ function onEstadoChange() {
 
   if (selectedEstado) {
     const areasSet = new Set();
-    catalog.filter(i => i.estado === selectedEstado).forEach(i => {
-      if (i.area_trabajo) areasSet.add(i.area_trabajo);
-    });
+    if (OFFICIAL_ESTADOS_AREAS[selectedEstado]) {
+      OFFICIAL_ESTADOS_AREAS[selectedEstado].forEach(a => areasSet.add(a));
+    }
+    if (Array.isArray(catalog)) {
+      catalog.filter(i => i.estado === selectedEstado).forEach(i => {
+        if (i.area_trabajo && i.area_trabajo !== "CAMPO" && i.area_trabajo !== "GENERAL") {
+          areasSet.add(i.area_trabajo);
+        }
+      });
+    }
     Array.from(areasSet).sort().forEach(area => {
       const opt = document.createElement("option");
       opt.value = area;
@@ -1744,24 +1848,28 @@ function populateManualEstados() {
   const select = document.getElementById("manualEstadoSelect");
   if (!select) return;
 
-  const estadosSet = new Set();
+  const estadosSet = new Set(Object.keys(OFFICIAL_ESTADOS_AREAS));
   if (Array.isArray(catalog)) {
     catalog.forEach(item => {
-      if (item.estado && item.estado !== "DESCONOCIDO") estadosSet.add(item.estado);
+      if (item.estado && item.estado !== "DESCONOCIDO" && item.estado !== "GENERAL") {
+        estadosSet.add(item.estado);
+      }
     });
   }
 
-  select.innerHTML = '<option value="">-- Seleccionar Estado --</option>';
+  const currentVal = select.value;
+  select.innerHTML = '<option value="">-- Seleccionar Estado * --</option>';
   Array.from(estadosSet).sort().forEach(est => {
     const opt = document.createElement("option");
     opt.value = est;
     opt.innerText = est;
+    if (est === currentVal) opt.selected = true;
     select.appendChild(opt);
   });
 
   const areaSelect = document.getElementById("manualAreaSelect");
-  if (areaSelect) {
-    areaSelect.innerHTML = '<option value="">-- Seleccionar Área --</option>';
+  if (areaSelect && !areaSelect.value) {
+    areaSelect.innerHTML = '<option value="">-- Seleccionar Área * --</option>';
   }
 }
 
@@ -1770,13 +1878,20 @@ function onManualEstadoChange() {
   const areaSelect = document.getElementById("manualAreaSelect");
   if (!areaSelect) return;
 
-  areaSelect.innerHTML = '<option value="">-- Seleccionar Área --</option>';
+  areaSelect.innerHTML = '<option value="">-- Seleccionar Área * --</option>';
 
-  if (selectedEstado && Array.isArray(catalog)) {
+  if (selectedEstado) {
     const areasSet = new Set();
-    catalog.filter(i => i.estado === selectedEstado).forEach(i => {
-      if (i.area_trabajo) areasSet.add(i.area_trabajo);
-    });
+    if (OFFICIAL_ESTADOS_AREAS[selectedEstado]) {
+      OFFICIAL_ESTADOS_AREAS[selectedEstado].forEach(a => areasSet.add(a));
+    }
+    if (Array.isArray(catalog)) {
+      catalog.filter(i => i.estado === selectedEstado).forEach(i => {
+        if (i.area_trabajo && i.area_trabajo !== "CAMPO" && i.area_trabajo !== "GENERAL" && i.area_trabajo !== "DESCONOCIDO") {
+          areasSet.add(i.area_trabajo);
+        }
+      });
+    }
     Array.from(areasSet).sort().forEach(area => {
       const opt = document.createElement("option");
       opt.value = area;
@@ -1790,14 +1905,18 @@ function confirmManualAssetSelection() {
   const idInput = document.getElementById("manualAssetIdInput");
   const rawId = (idInput?.value || "").trim().toUpperCase();
 
-  if (!rawId) {
-    alert("⚠️ Por favor ingresa el número identificador o teléfono de la " + (manualSelectedType === "CASETA" ? "caseta" : "caja") + ".");
-    if (idInput) idInput.focus();
+  if (!rawId || rawId.length < 2 || rawId === "S/N" || rawId === "N/A") {
+    showCustomAlert("⚠️ <strong>Identificador Obligatorio:</strong><br><br>Por favor ingresa un número identificador o teléfono válido de la " + (manualSelectedType === "CASETA" ? "caseta" : "caja") + " (mínimo 2 caracteres).", "Dato Requerido");
+    if (idInput) {
+      idInput.style.border = "2px solid #ef4444";
+      idInput.focus();
+    }
     return;
   }
+  if (idInput) idInput.style.border = "1px solid #cbd5e1";
 
   if (!manualSelectedModel) {
-    alert("⚠️ Por favor selecciona el modelo en el catálogo visual.");
+    showCustomAlert("⚠️ <strong>Modelo Obligatorio:</strong><br><br>Por favor selecciona el modelo en el catálogo visual.", "Dato Requerido");
     return;
   }
 
@@ -1805,12 +1924,48 @@ function confirmManualAssetSelection() {
   const areaSelect = document.getElementById("manualAreaSelect");
   const calleInput = document.getElementById("manualCalleInput");
 
-  const estadoVal = estadoSelect?.value || document.getElementById("filterEstado")?.value || "GENERAL";
-  const areaVal = areaSelect?.value || document.getElementById("filterArea")?.value || "CAMPO";
-  const calleVal = (calleInput?.value || "").trim() || "Registro en Campo (Fuera de Catálogo)";
+  const estadoVal = (estadoSelect?.value || "").trim().toUpperCase();
+  if (!estadoVal || estadoVal === "DESCONOCIDO" || estadoVal === "GENERAL") {
+    showCustomAlert("⚠️ <strong>Estado de la República Obligatorio:</strong><br><br>Debes seleccionar el Estado de la República donde se ubica la estructura.", "Dato Requerido");
+    if (estadoSelect) {
+      estadoSelect.style.border = "2px solid #ef4444";
+      estadoSelect.focus();
+    }
+    return;
+  }
+  if (estadoSelect) estadoSelect.style.border = "1px solid #cbd5e1";
 
-  const latVal = (currentGpsCoords && currentGpsCoords.lat != null) ? currentGpsCoords.lat : null;
-  const lonVal = (currentGpsCoords && currentGpsCoords.lon != null) ? currentGpsCoords.lon : null;
+  const areaVal = (areaSelect?.value || "").trim().toUpperCase();
+  if (!areaVal || areaVal === "CAMPO" || areaVal === "GENERAL" || areaVal === "DESCONOCIDO") {
+    showCustomAlert("⚠️ <strong>Área de Trabajo Obligatoria:</strong><br><br>Debes seleccionar el Área de Trabajo correspondiente a la estructura.", "Dato Requerido");
+    if (areaSelect) {
+      areaSelect.style.border = "2px solid #ef4444";
+      areaSelect.focus();
+    }
+    return;
+  }
+  if (areaSelect) areaSelect.style.border = "1px solid #cbd5e1";
+
+  const calleVal = (calleInput?.value || "").trim();
+  if (!calleVal || calleVal.length < 3) {
+    showCustomAlert("⚠️ <strong>Calle / Referencia Obligatoria:</strong><br><br>Debes ingresar la calle, cruce o referencia física de la ubicación.", "Dato Requerido");
+    if (calleInput) {
+      calleInput.style.border = "2px solid #ef4444";
+      calleInput.focus();
+    }
+    return;
+  }
+  if (calleInput) calleInput.style.border = "1px solid #cbd5e1";
+
+  // Determinar coordenadas válidas (GPS en vivo o coordenadas oficiales del Área)
+  let latVal = (currentGpsCoords && currentGpsCoords.lat != null && currentGpsCoords.lat !== 0) ? currentGpsCoords.lat : null;
+  let lonVal = (currentGpsCoords && currentGpsCoords.lon != null && currentGpsCoords.lon !== 0) ? currentGpsCoords.lon : null;
+
+  if (latVal == null || lonVal == null) {
+    const areaCoords = AREA_COORDINATES_MAP[areaVal] || AREA_COORDINATES_MAP[estadoVal] || { lat: 19.4326, lon: -99.1332 };
+    latVal = areaCoords.lat;
+    lonVal = areaCoords.lon;
+  }
 
   const proceso = document.querySelector('input[name="filterProceso"]:checked')?.value || "IMAGEN";
   const uniqueId = generateUniqueId(manualSelectedType, areaVal);
@@ -1820,7 +1975,7 @@ function confirmManualAssetSelection() {
     tipo: manualSelectedType,
     modelo_tipo: manualSelectedModel,
     calle: calleVal,
-    colonia: "Campo",
+    colonia: areaVal,
     municipio: areaVal,
     estado: estadoVal,
     area_trabajo: areaVal,
@@ -1830,6 +1985,7 @@ function confirmManualAssetSelection() {
     is_manual: true,
     is_fuera_catalogo: true,
     existe_en_bd: "No",
+    is_remote: true,
     unique_id: uniqueId
   };
 
@@ -1852,7 +2008,7 @@ function confirmManualAssetSelection() {
     existeBdEl.style.color = "#b45309";
   }
   document.getElementById("formAssetDetails").value = `Proceso: ${proceso} | Tipo: ${selectedAsset.tipo} | Modelo: ${manualSelectedModel} (No existe en BD)`;
-  const coordsStr = (latVal != null && lonVal != null) ? ` | Coords GPS: ${latVal.toFixed(6)}, ${lonVal.toFixed(6)}` : '';
+  const coordsStr = (latVal != null && lonVal != null) ? ` | Coords: ${latVal.toFixed(6)}, ${lonVal.toFixed(6)}` : '';
   document.getElementById("formAssetInfo").value = `Calle: ${calleVal}${coordsStr}`;
 
   document.getElementById("ofertaColocada").value = "120 MB";
@@ -1860,7 +2016,7 @@ function confirmManualAssetSelection() {
   closeManualAssetModal();
   switchView('form');
 
-  showCustomAlert(`✅ <strong>Registro Manual Fuera de BD Preparado:</strong><br><br><strong>Folio:</strong> ${uniqueId}<br><strong>ID / Ref:</strong> ${rawId}<br><strong>Tipo:</strong> ${manualSelectedType} (${manualSelectedModel})<br><strong>¿Existe en BD?:</strong> No<br><br>Continúa con el llenado de los campos requeridos y toma la <strong>Foto DESPUÉS</strong> para guardar la evidencia.`, "Registro Manual en Campo");
+  showCustomAlert(`✅ <strong>Registro Manual Fuera de BD Preparado:</strong><br><br><strong>Folio:</strong> ${uniqueId}<br><strong>ID / Ref:</strong> ${rawId}<br><strong>Tipo:</strong> ${manualSelectedType} (${manualSelectedModel})<br><strong>Estado:</strong> ${estadoVal}<br><strong>Área:</strong> ${areaVal}<br><strong>Calle:</strong> ${calleVal}<br><br>Por favor continúa con la <strong>Foto DESPUÉS</strong> y completa los campos obligatorios para guardar la evidencia localmente.`, "Registro Manual Preparado");
 }
 
 // ---------------------------------------------------------
@@ -1914,63 +2070,125 @@ function handlePhotoSelect(event, type) {
 // GUARDAR EVIDENCIA OFFLINE
 // ---------------------------------------------------------
 function saveEvidence(event) {
-  event.preventDefault();
+  if (event && event.preventDefault) event.preventDefault();
 
-  // 1. Validar Contratista y Técnico (Obligatorios)
-  if (!userContratista || !userTecnico) {
-    alert("⚠️ Debes configurar primero tu Contratista y Nombre de Técnico antes de guardar.");
-    openUserSetupModal();
-    return;
+  // 1. Validar Contratista y Técnico (Obligatorios y sin valores inválidos)
+  const contra = (userContratista || "").trim();
+  const tec = (userTecnico || "").trim();
+  if (!contra || contra === "N/A" || contra === "OTRO" || contra === "undefined" || contra === "null" ||
+      !tec || tec === "N/A" || tec === "OTRO" || tec === "undefined" || tec === "null") {
+    showCustomAlert("⚠️ <strong>Datos de Técnico y Contratista Obligatorios:</strong><br><br>Debes configurar primero tu Contratista y tu Nombre de Técnico antes de poder guardar cualquier evidencia.", "Configuración Requerida", () => {
+      openUserSetupModal();
+    });
+    return false;
   }
 
-  // 2. Validar Activo Seleccionado (Obligatorio)
-  if (!selectedAsset || !selectedAsset.id) {
-    alert("⚠️ Error: No hay ningún activo seleccionado. Por favor selecciona una caja o caseta.");
-    switchView('search');
-    return;
+  // 2. Validar Activo Seleccionado
+  if (!selectedAsset) {
+    showCustomAlert("⚠️ <strong>Activo no seleccionado:</strong><br><br>No hay ningún activo seleccionado. Por favor busca una caja o caseta o agrégala manualmente.", "Activo Requerido", () => {
+      switchView('search');
+    });
+    return false;
   }
 
-  // 3. Validar Modelo Seleccionado (Obligatorio)
-  if (!selectedModelFilter) {
-    alert("⚠️ Error: Debes seleccionar el Modelo de " + (selectedAsset.tipo === "CASETA" ? "Caseta" : "Caja") + " antes de guardar el registro.");
-    return;
+  // 3. Validar Identificador / Teléfono del activo
+  const assetId = (selectedAsset.id || "").trim().toUpperCase();
+  if (!assetId || assetId === "S/N" || assetId === "N/A" || assetId.length < 2) {
+    showCustomAlert("⚠️ <strong>Identificador / Teléfono inválido:</strong><br><br>El activo seleccionado no cuenta con un número identificador o teléfono válido.", "Identificador Requerido");
+    return false;
   }
 
-  // 4. Validar Fotografía DESPUÉS (Obligatoria)
-  if (!photoDespuesBase64) {
-    alert("⚠️ La Foto DESPUÉS es OBLIGATORIA. Por favor toma la fotografía para continuar.");
+  // 4. Validar Tipo de Elemento (CAJA o CASETA)
+  const tipoElemento = (selectedAsset.tipo || "").trim().toUpperCase();
+  if (tipoElemento !== "CAJA" && tipoElemento !== "CASETA") {
+    showCustomAlert("⚠️ <strong>Tipo de Activo Inválido:</strong><br><br>El activo debe ser tipo CAJA o CASETA.", "Tipo Requerido");
+    return false;
+  }
+
+  // 5. Validar Modelo Seleccionado
+  const modelo = (selectedModelFilter || selectedAsset.modelo_tipo || "").trim();
+  if (!modelo) {
+    showCustomAlert("⚠️ <strong>Modelo no seleccionado:</strong><br><br>Debes seleccionar el modelo visual de la " + (tipoElemento === "CASETA" ? "Caseta" : "Caja") + " antes de guardar.", "Modelo Requerido");
+    return false;
+  }
+
+  // 6. Validar Estado de la República
+  const estadoVal = (selectedAsset.estado || document.getElementById("formAssetEstado")?.value || "").trim().toUpperCase();
+  if (!estadoVal || estadoVal === "GENERAL" || estadoVal === "DESCONOCIDO") {
+    showCustomAlert("⚠️ <strong>Estado de la República Obligatorio:</strong><br><br>El registro no tiene un Estado asignado. Por favor ingresa o selecciona un Estado válido.", "Estado Requerido");
+    return false;
+  }
+
+  // 7. Validar Área de Trabajo
+  const areaVal = (selectedAsset.area_trabajo || selectedAsset.municipio || document.getElementById("formAssetArea")?.value || "").trim().toUpperCase();
+  if (!areaVal || areaVal === "CAMPO" || areaVal === "GENERAL" || areaVal === "DESCONOCIDO") {
+    showCustomAlert("⚠️ <strong>Área de Trabajo Obligatoria:</strong><br><br>El registro no tiene un Área de Trabajo asignada. Por favor selecciona un Área válida.", "Área Requerida");
+    return false;
+  }
+
+  // 8. Validar Calle / Dirección
+  const calleVal = (selectedAsset.calle || "").trim();
+  if (!calleVal || (calleVal === "S/N" && selectedAsset.is_manual)) {
+    showCustomAlert("⚠️ <strong>Calle / Ubicación Obligatoria:</strong><br><br>Debes proporcionar la calle o referencia física de la ubicación del activo.", "Ubicación Requerida");
+    return false;
+  }
+
+  // 9. Validar Existencia en Sitio
+  const existenciaEl = document.querySelector('input[name="existencia"]:checked');
+  if (!existenciaEl || !existenciaEl.value) {
+    showCustomAlert("⚠️ <strong>Existencia Obligatoria:</strong><br><br>Por favor indica si Existe la Caja / Caseta en el sitio.", "Existencia Requerida");
+    return false;
+  }
+  const existencia = existenciaEl.value;
+
+  // 10. Validar Número de Viniles
+  const numVinilesEl = document.getElementById("numViniles");
+  const numVinilesVal = numVinilesEl?.value;
+  if (numVinilesVal === undefined || numVinilesVal === null || numVinilesVal === "") {
+    showCustomAlert("⚠️ <strong>Número de Viniles Obligatorio:</strong><br><br>Por favor selecciona el número de viniles instalados.", "Viniles Requeridos");
+    if (numVinilesEl) {
+      numVinilesEl.style.border = "2px solid #ef4444";
+      numVinilesEl.focus();
+    }
+    return false;
+  }
+  if (numVinilesEl) numVinilesEl.style.border = "1px solid #cbd5e1";
+  const numViniles = parseInt(numVinilesVal) || 0;
+
+  // 11. Validar Oferta Colocada
+  const ofertaEl = document.getElementById("ofertaColocada");
+  const oferta = ofertaEl?.value;
+  if (!oferta || (!oferta.includes("120") && !oferta.includes("200") && !oferta.includes("250"))) {
+    showCustomAlert("⚠️ <strong>Oferta Colocada Obligatoria:</strong><br><br>Por favor selecciona la Oferta Colocada (120 MB, 200 MB o 250 MB).", "Oferta Requerida");
+    if (ofertaEl) {
+      ofertaEl.style.border = "2px solid #ef4444";
+      ofertaEl.focus();
+    }
+    return false;
+  }
+  if (ofertaEl) ofertaEl.style.border = "1px solid #cbd5e1";
+
+  // 12. Validar Fotografía DESPUÉS (Obligatoria y en formato base64 de imagen)
+  if (!photoDespuesBase64 || typeof photoDespuesBase64 !== "string" || !photoDespuesBase64.startsWith("data:image/")) {
+    showCustomAlert("⚠️ <strong>Foto DESPUÉS Obligatoria:</strong><br><br>La fotografía de evidencia DESPUÉS es obligatoria. Por favor toma o sube la foto para continuar.", "Foto Obligatoria");
     const box = document.getElementById("boxFotoDespues");
     if (box) {
       box.style.border = "2px solid #ef4444";
       box.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-    return;
+    return false;
   }
 
-  // 5. Validar Existencia (Obligatorio)
-  const existenciaEl = document.querySelector('input[name="existencia"]:checked');
-  if (!existenciaEl) {
-    alert("⚠️ Por favor indica si Existe la Caja / Caseta en el sitio.");
-    return;
-  }
-  const existencia = existenciaEl.value;
+  // 13. Coordenadas de Captura Válidas
+  let gpsLat = (selectedAsset.lat != null && selectedAsset.lat !== 0) ? selectedAsset.lat : ((currentGpsCoords && currentGpsCoords.lat != null && currentGpsCoords.lat !== 0) ? currentGpsCoords.lat : null);
+  let gpsLon = (selectedAsset.lon != null && selectedAsset.lon !== 0) ? selectedAsset.lon : ((currentGpsCoords && currentGpsCoords.lon != null && currentGpsCoords.lon !== 0) ? currentGpsCoords.lon : null);
+  let gpsAccuracy = 1;
 
-  // 6. Validar Oferta Colocada (Obligatorio)
-  const oferta = document.getElementById("ofertaColocada")?.value;
-  if (!oferta) {
-    alert("⚠️ Por favor selecciona la Oferta Colocada (120 MB, 200 MB o 250 MB).");
-    document.getElementById("ofertaColocada")?.focus();
-    return;
+  if (gpsLat == null || gpsLon == null || gpsLat === 0 || gpsLon === 0) {
+    const areaCoords = AREA_COORDINATES_MAP[areaVal] || AREA_COORDINATES_MAP[estadoVal] || { lat: 19.4326, lon: -99.1332 };
+    gpsLat = areaCoords.lat;
+    gpsLon = areaCoords.lon;
   }
-
-  // 7. Validar Número de Viniles (Obligatorio)
-  const numVinilesVal = document.getElementById("numViniles")?.value;
-  if (numVinilesVal === undefined || numVinilesVal === null || numVinilesVal === "") {
-    alert("⚠️ Por favor selecciona el número de viniles instalados.");
-    document.getElementById("numViniles")?.focus();
-    return;
-  }
-  const numViniles = parseInt(numVinilesVal) || 0;
 
   const proceso = document.querySelector('input[name="filterProceso"]:checked')?.value || "IMAGEN";
   const rawComentarios = document.getElementById("comentarios")?.value?.trim() || "Sin observaciones";
@@ -1979,26 +2197,24 @@ function saveEvidence(event) {
   const comentarios = rawComentarios.includes("[CARGA REMOTA") ? rawComentarios : `${rawComentarios} ${remoteTag}`.trim();
 
   const timestamp = new Date().toISOString();
-  const areaVal = selectedAsset.area_trabajo || selectedAsset.municipio || "GENERAL";
-  const uniqueId = selectedAsset.unique_id || generateUniqueId(selectedAsset.tipo, areaVal);
-
+  const uniqueId = selectedAsset.unique_id || generateUniqueId(tipoElemento, areaVal);
   const isManualAsset = selectedAsset.is_manual === true || selectedAsset.is_fuera_catalogo === true || selectedAsset.existe_en_bd === "No";
 
   const evidenceRecord = {
     id_registro_local: "EV_" + Date.now(),
     unique_id: uniqueId,
-    asset_id: selectedAsset.id,
-    contratista: userContratista,
-    tecnico: userTecnico,
+    asset_id: assetId,
+    contratista: contra,
+    tecnico: tec,
     proceso: proceso,
-    tipo_elemento: selectedAsset.tipo,
-    modelo_tipo: selectedModelFilter,
-    estado: selectedAsset.estado || "",
-    area_trabajo: selectedAsset.area_trabajo || selectedAsset.municipio || "",
-    municipio: selectedAsset.municipio || "",
-    calle: selectedAsset.calle || "",
-    lat_original: selectedAsset.lat,
-    lon_original: selectedAsset.lon,
+    tipo_elemento: tipoElemento,
+    modelo_tipo: modelo,
+    estado: estadoVal,
+    area_trabajo: areaVal,
+    municipio: areaVal,
+    calle: calleVal,
+    lat_original: selectedAsset.lat || gpsLat,
+    lon_original: selectedAsset.lon || gpsLon,
     is_manual: isManualAsset,
     existe_en_bd: isManualAsset ? "No" : "Sí",
     is_remote: true,
@@ -2013,10 +2229,10 @@ function saveEvidence(event) {
     // Fotos (Únicamente Foto DESPUÉS)
     foto_despues: photoDespuesBase64,
     
-    // Coordenadas Remotas (Usa catálogo original garantizado sin requerir GPS)
-    gps_captura_lat: (selectedAsset.lat != null) ? selectedAsset.lat : ((currentGpsCoords && currentGpsCoords.lat != null) ? currentGpsCoords.lat : 0),
-    gps_captura_lon: (selectedAsset.lon != null) ? selectedAsset.lon : ((currentGpsCoords && currentGpsCoords.lon != null) ? currentGpsCoords.lon : 0),
-    gps_precision_m: 1,
+    // Coordenadas Remotas
+    gps_captura_lat: gpsLat,
+    gps_captura_lon: gpsLon,
+    gps_precision_m: gpsAccuracy,
     
     fecha_captura: timestamp
   };
@@ -2025,7 +2241,7 @@ function saveEvidence(event) {
   markAssetCompletedPermanently(evidenceRecord.asset_id, evidenceRecord.unique_id);
   saveEvidencesToStorage();
 
-  alert(`✅ Evidencia guardada exitosamente (${uniqueId}).`);
+  showCustomAlert(`✅ <strong>Evidencia guardada exitosamente en el dispositivo:</strong><br><br><strong>Folio:</strong> ${uniqueId}<br><strong>ID / Ref:</strong> ${assetId}<br><strong>Estado / Área:</strong> ${estadoVal} - ${areaVal}<br><strong>Foto:</strong> Registrada ✔<br><br>El registro quedó guardado en tu lote de evidencias pendientes de envío.`, "Evidencia Guardada");
 
   // Reset Form y Activo Seleccionado
   selectedAsset = null;
@@ -2046,6 +2262,7 @@ function saveEvidence(event) {
   applyHierarchyFilter();
 
   switchView('sync');
+  return true;
 }
 
 // ---------------------------------------------------------
@@ -2385,9 +2602,11 @@ async function syncAllToLinkaform() {
     };
 
     // Subir Foto DESPUÉS (Campo ID: 6a99e764f9c750d6db214c55)
+    let photoUploaded = false;
     if (ev.foto_despues) {
       const urlDespues = await uploadImageToLinkaformCloud(ev.foto_despues, LINKAFORM_FIELDS.foto_despues, `despues_${asset_id}.jpg`);
       if (urlDespues) {
+        photoUploaded = true;
         answers[LINKAFORM_FIELDS.foto_despues] = [{
           file_name: `despues_${asset_id}.jpg`,
           file_url: urlDespues
@@ -2398,6 +2617,13 @@ async function syncAllToLinkaform() {
           file_url: urlDespues
         }];
       }
+    }
+
+    if (!photoUploaded) {
+      console.error(`[Linkaform] Falló la subida de foto para ${asset_id}. No se enviará el registro incompleto.`);
+      remainingEvidences.push(ev);
+      lastErrorMessage = `Error al subir la fotografía de ${asset_id} a Linkaform Cloud. Verifica tu conexión.`;
+      continue;
     }
 
     const payload = {
