@@ -2098,6 +2098,19 @@ function saveEvidence(event) {
     return false;
   }
 
+  // 3.1 Prevenir Duplicados: Verificar si ya existe en el lote pendiente o ya fue completado
+  const alreadyInBatch = Array.isArray(dbEvidences) && dbEvidences.some(ev => String(ev.asset_id || "").trim().toUpperCase() === assetId);
+  if (alreadyInBatch) {
+    showCustomAlert(`⚠️ <strong>Activo Ya Registrado en tu Lote:</strong><br><br>El activo <strong>${assetId}</strong> ya se encuentra guardado en este teléfono en la lista de evidencias pendientes.<br><br>No es necesario capturarlo dos veces.`, "Activo Duplicado");
+    return false;
+  }
+
+  const alreadyCompleted = completedAssetIdsSet && completedAssetIdsSet.has(assetId);
+  if (alreadyCompleted) {
+    showCustomAlert(`⚠️ <strong>Activo Ya Completado Previamente:</strong><br><br>El activo <strong>${assetId}</strong> ya fue registrado y confirmado exitosamente con anterioridad.<br><br>Para evitar duplicar registros en Linkaform, no está permitido recapturarlo.`, "Activo Ya Completado");
+    return false;
+  }
+
   // 4. Validar Tipo de Elemento (CAJA o CASETA)
   const tipoElemento = (selectedAsset.tipo || "").trim().toUpperCase();
   if (tipoElemento !== "CAJA" && tipoElemento !== "CASETA") {
