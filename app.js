@@ -2031,8 +2031,8 @@ function handlePhotoSelect(event, type) {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      const MAX_WIDTH = 1280;
-      const MAX_HEIGHT = 1280;
+      const MAX_WIDTH = 1080;
+      const MAX_HEIGHT = 1080;
       let width = img.width;
       let height = img.height;
 
@@ -2053,7 +2053,7 @@ function handlePhotoSelect(event, type) {
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, width, height);
 
-      const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.75);
+      const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.68);
 
       photoDespuesBase64 = compressedDataUrl;
       document.getElementById("previewDespues").src = compressedDataUrl;
@@ -2428,7 +2428,43 @@ function markAssetCompletedPermanently(assetId, uniqueId) {
   updateDailyGoalUI();
 }
 
-function loadEvidencesFromStorage() {
+// ---------------------------------------------------------
+// MOTOR DE ALMACENAMIENTO HÍBRIDO (INDEXEDDB + LOCALSTORAGE)
+// Soporta lotes ilimitados de fotos sin error de QuotaExceeded
+// ---------------------------------------------------------
+const IDB_CONFIG = {
+  dbName: "TelmexOfflineDB_2026",
+  storeName: "evidences_store",
+  key: "current_batch"
+};
+
+function openIndexedDB() {
+  return new Promise((resolve) => {
+    if (!window.indexedDB) {
+      resolve(null);
+      return;
+    }
+    try {
+      const request = indexedDB.open(IDB_CONFIG.dbName, 1);
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(IDB_CONFIG.storeName)) {
+          db.createObjectStore(IDB_CONFIG.storeName);
+        }
+      };
+      request.onsuccess = (e) => resolve(e.target.result);
+      request.onerror = (e) => {
+        console.warn("IndexedDB no disponible, usando localStorage fallback:", e);
+        resolve(null);
+      };
+    } catch(err) {
+      resolve(null);
+    }
+  });
+}
+
+async function loadEvidencesFromStorage() {
+  // 1. Carga inicial síncrona inmediata desde localStorage
   const saved = localStorage.getItem("TELMEX_EVIDENCES_2026");
   if (saved) {
     try {
@@ -2439,21 +2475,74 @@ function loadEvidencesFromStorage() {
   }
   getCompletedAssetIdsSet();
   updateSyncBadges();
+
+  // 2. Consulta asíncrona a IndexedDB (almacena el lote completo sin límite de 5MB)
+  try {
+    const db = await openIndexedDB();
+    if (db) {
+      const tx = db.transaction(IDB_CONFIG.storeName, "readonly");
+      const store = tx.objectStore(IDB_CONFIG.storeName);
+      const req = store.get(IDB_CONFIG.key);
+      req.onsuccess = () => {
+        const result = req.result;
+        if (Array.isArray(result) && result.length >= dbEvidences.length) {
+          dbEvidences = result;
+          getCompletedAssetIdsSet();
+          updateSyncBadges();
+          renderSavedEvidences();
+          updateDailyGoalUI();
+          applyHierarchyFilter();
+          console.log(`[Storage] ${dbEvidences.length} evidencias cargadas y verificadas desde IndexedDB.`);
+        }
+      };
+    }
+  } catch(e) {
+    console.warn("IndexedDB read error:", e);
+  }
 }
 
-function saveEvidencesToStorage() {
-  localStorage.setItem("TELMEX_EVIDENCES_2026", JSON.stringify(dbEvidences));
+async function saveEvidencesToStorage() {
   updateSyncBadges();
+
+  // 1. Guardar en IndexedDB (sin límite de 5MB, seguro para 30, 50 o más fotos)
+  try {
+    const db = await openIndexedDB();
+    if (db) {
+      const tx = db.transaction(IDB_CONFIG.storeName, "readwrite");
+      const store = tx.objectStore(IDB_CONFIG.storeName);
+      store.put(dbEvidences, IDB_CONFIG.key);
+    }
+  } catch (err) {
+    console.warn("Error guardando en IndexedDB:", err);
+  }
+
+  // 2. Respaldo en localStorage con manejo seguro de QuotaExceededError
+  try {
+    localStorage.setItem("TELMEX_EVIDENCES_2026", JSON.stringify(dbEvidences));
+  } catch (err) {
+    console.warn("localStorage quota superada (normal con muchas fotos). Protegido en IndexedDB:", err);
+    try {
+      // Respaldo ligero sin base64 en localStorage en caso de saturación
+      const light = dbEvidences.map(ev => ({
+        ...ev,
+        foto_despues: ev.url_foto_despues || (ev.foto_despues ? "[GUARDADA_EN_INDEXEDDB]" : "")
+      }));
+      localStorage.setItem("TELMEX_EVIDENCES_2026_LIGHT", JSON.stringify(light));
+    } catch (e2) {}
+  }
 }
 
 function updateSyncBadges() {
   const count = dbEvidences.length;
-  document.getElementById("syncBadge").innerText = count;
-  document.getElementById("navCount").innerText = count;
+  const b1 = document.getElementById("syncBadge");
+  const b2 = document.getElementById("navCount");
+  if (b1) b1.innerText = count;
+  if (b2) b2.innerText = count;
 }
 
 function renderSavedEvidences() {
   const container = document.getElementById("savedEvidencesList");
+  if (!container) return;
   container.innerHTML = "";
 
   if (dbEvidences.length === 0) {
@@ -2472,16 +2561,18 @@ function renderSavedEvidences() {
       ? '<span style="background:#fef3c7; color:#b45309; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:bold;">No en BD</span>'
       : '<span style="background:#dcfce7; color:#15803d; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:bold;">En BD: Sí</span>';
 
+    const fechaStr = ev.fecha_captura ? new Date(ev.fecha_captura).toLocaleTimeString() : "";
+
     card.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; font-weight:bold; font-size:0.9rem;">
         <span>${ev.asset_id} (${ev.tipo_elemento}) ${bdBadge}</span>
-        <span style="color:var(--text-muted); font-size:0.75rem;">${new Date(ev.fecha_captura).toLocaleTimeString()}</span>
+        <span style="color:var(--text-muted); font-size:0.75rem;">${fechaStr}</span>
       </div>
       <div style="font-size:0.8rem; color:var(--text-dark); margin-top:4px;">
         📌 Estado: <strong>${ev.existencia}</strong> | Trabajo: <strong>${ev.proceso || 'IMAGEN'}</strong> | Viniles: <strong>${ev.num_viniles}</strong> | Oferta: <strong>${ev.oferta_colocada}</strong>
       </div>
       <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
-        📍 Área: ${ev.area_trabajo || 'N/A'} (${ev.estado || 'N/A'}) | GPS Foto: ${ev.gps_captura_lat ? `${ev.gps_captura_lat.toFixed(5)}, ${ev.gps_captura_lon.toFixed(5)}` : 'Sin GPS'}
+        📍 Área: ${ev.area_trabajo || 'N/A'} (${ev.estado || 'N/A'}) | GPS Foto: ${ev.gps_captura_lat ? `${Number(ev.gps_captura_lat).toFixed(5)}, ${Number(ev.gps_captura_lon).toFixed(5)}` : 'Sin GPS'}
       </div>
     `;
 
@@ -2490,32 +2581,57 @@ function renderSavedEvidences() {
 }
 
 async function uploadImageToLinkaformCloud(b64DataUrl, fieldId, filename) {
-  try {
-    const fetchRes = await fetch(b64DataUrl);
-    const blob = await fetchRes.blob();
+  if (!b64DataUrl || typeof b64DataUrl !== "string") return null;
 
-    const formData = new FormData();
-    formData.append("file", blob, filename);
-    formData.append("field_id", fieldId);
-    formData.append("form_id", "142786");
-    formData.append("is_image", "true");
+  // Si ya es una URL pública subida previamente (en un intento anterior), no volver a subir
+  if (b64DataUrl.startsWith("http://") || b64DataUrl.startsWith("https://")) {
+    return b64DataUrl;
+  }
 
-    const uploadRes = await fetch("https://app.linkaform.com/api/infosync/cloud_upload/", {
-      method: "POST",
-      body: formData
-    });
+  // Hasta 2 intentos con pausa de recuperación en caso de intermitencia de red móvil en campo
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const fetchRes = await fetch(b64DataUrl);
+      const blob = await fetchRes.blob();
 
-    if (uploadRes.ok) {
-      const json = await uploadRes.json();
-      return json.file;
+      const formData = new FormData();
+      formData.append("file", blob, filename);
+      formData.append("field_id", fieldId);
+      formData.append("form_id", "142786");
+      formData.append("is_image", "true");
+
+      const uploadRes = await fetch("https://app.linkaform.com/api/infosync/cloud_upload/", {
+        method: "POST",
+        body: formData
+      });
+
+      if (uploadRes.ok) {
+        const json = await uploadRes.json();
+        if (json && json.file) {
+          return json.file;
+        }
+      } else {
+        const errText = await uploadRes.text();
+        console.warn(`[cloud_upload attempt ${attempt}] HTTP ${uploadRes.status}: ${errText.substring(0, 100)}`);
+      }
+    } catch (e) {
+      console.warn(`[cloud_upload attempt ${attempt}] Error de red:`, e);
     }
-  } catch (e) {
-    console.log("Error al subir foto a cloud_upload", e);
+    if (attempt < 2) {
+      await new Promise(r => setTimeout(r, 1200));
+    }
   }
   return null;
 }
 
+let isSyncingToLinkaform = false;
+
 async function syncAllToLinkaform() {
+  if (isSyncingToLinkaform) {
+    alert("⏳ Ya hay un proceso de sincronización en curso. Por favor espera a que termine.");
+    return;
+  }
+
   if (dbEvidences.length === 0) {
     alert("No hay evidencias pendientes en el teléfono.");
     return;
@@ -2527,8 +2643,14 @@ async function syncAllToLinkaform() {
     return;
   }
 
+  isSyncingToLinkaform = true;
   const btn = document.getElementById("btnSyncLinkaform");
-  if (btn) btn.innerText = "⏳ Subiendo fotos y enviando...";
+  const total = dbEvidences.length;
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = "0.75";
+    btn.innerText = `⏳ Iniciando envío de ${total} evidencias...`;
+  }
 
   const LINKAFORM_API_URL = "https://app.linkaform.com/api/infosync/form_answer/";
   const LINKAFORM_FIELDS = {
@@ -2558,7 +2680,15 @@ async function syncAllToLinkaform() {
   let lastErrorMessage = "";
   let isNetworkFailure = false;
 
-  for (let ev of dbEvidences) {
+  for (let i = 0; i < total; i++) {
+    const ev = dbEvidences[i];
+    const asset_id = String(ev.asset_id || "S/N");
+    const unique_id = String(ev.unique_id || asset_id);
+
+    if (btn) {
+      btn.innerText = `⏳ Subiendo ${i + 1} de ${total} (${asset_id})...`;
+    }
+
     const exist_str = (ev.existencia || "EXISTE").toLowerCase();
     const existencia_val = (exist_str.includes("existe") || exist_str.includes("si")) ? "sí" : "no";
     const rawOferta = String(ev.oferta_colocada || "120 MB");
@@ -2569,8 +2699,6 @@ async function syncAllToLinkaform() {
     const proc_str = (ev.proceso || "IMAGEN").toLowerCase();
     const tipo_trabajo_val = proc_str.includes("limpieza") ? "limpieza" : "imagen";
     const num_viniles_val = String(ev.num_viniles !== undefined && ev.num_viniles !== null ? ev.num_viniles : 1);
-    const asset_id = String(ev.asset_id || "S/N");
-    const unique_id = String(ev.unique_id || asset_id);
     const lat_val = ev.gps_captura_lat !== null && ev.gps_captura_lat !== undefined ? ev.gps_captura_lat : (ev.lat_original || 0);
     const lon_val = ev.gps_captura_lon !== null && ev.gps_captura_lon !== undefined ? ev.gps_captura_lon : (ev.lon_original || 0);
     const modelo_val = String(ev.modelo_tipo || (ev.tipo_elemento === "CASETA" ? "NORMAL" : "Tradicional Sencilla"));
@@ -2601,30 +2729,35 @@ async function syncAllToLinkaform() {
       [LINKAFORM_FIELDS.tecnico]: tecnico_val
     };
 
-    // Subir Foto DESPUÉS (Campo ID: 6a99e764f9c750d6db214c55)
+    // Subir Foto DESPUÉS
     let photoUploaded = false;
-    if (ev.foto_despues) {
-      const urlDespues = await uploadImageToLinkaformCloud(ev.foto_despues, LINKAFORM_FIELDS.foto_despues, `despues_${asset_id}.jpg`);
+    let urlDespues = ev.url_foto_despues || null;
+
+    if (urlDespues && (urlDespues.startsWith("http://") || urlDespues.startsWith("https://"))) {
+      photoUploaded = true;
+    } else if (ev.foto_despues) {
+      urlDespues = await uploadImageToLinkaformCloud(ev.foto_despues, LINKAFORM_FIELDS.foto_despues, `despues_${asset_id}.jpg`);
       if (urlDespues) {
         photoUploaded = true;
-        answers[LINKAFORM_FIELDS.foto_despues] = [{
-          file_name: `despues_${asset_id}.jpg`,
-          file_url: urlDespues
-        }];
-        // Respaldar también a foto_antes para garantizar visualización en cualquier vista de Linkaform
-        answers[LINKAFORM_FIELDS.foto_antes] = [{
-          file_name: `despues_${asset_id}.jpg`,
-          file_url: urlDespues
-        }];
+        ev.url_foto_despues = urlDespues; // Guardar URL en el registro para no resubir en reintentos
       }
     }
 
-    if (!photoUploaded) {
-      console.error(`[Linkaform] Falló la subida de foto para ${asset_id}. No se enviará el registro incompleto.`);
+    if (!photoUploaded || !urlDespues) {
+      console.error(`[Linkaform] Falló la subida de foto para ${asset_id}. Se conserva en el teléfono para reintentar.`);
       remainingEvidences.push(ev);
-      lastErrorMessage = `Error al subir la fotografía de ${asset_id} a Linkaform Cloud. Verifica tu conexión.`;
+      lastErrorMessage = `Error al subir la fotografía de ${asset_id} a Linkaform Cloud. Verifica tu conexión de datos.`;
       continue;
     }
+
+    answers[LINKAFORM_FIELDS.foto_despues] = [{
+      file_name: `despues_${asset_id}.jpg`,
+      file_url: urlDespues
+    }];
+    answers[LINKAFORM_FIELDS.foto_antes] = [{
+      file_name: `despues_${asset_id}.jpg`,
+      file_url: urlDespues
+    }];
 
     const payload = {
       form_id: 142786,
@@ -2632,7 +2765,7 @@ async function syncAllToLinkaform() {
     };
 
     try {
-      console.log("[POST Linkaform Payload]", payload);
+      console.log(`[POST Linkaform Payload ${i + 1}/${total}]`, payload);
       const response = await fetch(LINKAFORM_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2645,12 +2778,40 @@ async function syncAllToLinkaform() {
       if (response.ok) {
         let resData = {};
         try { resData = JSON.parse(resText); } catch(e) {}
-        const folio = resData.folio || resData.id || resData.answers_id || 
-                      (resData.response && (resData.response.folio || resData.response.id)) || 
-                      (resData.data && (resData.data.folio || resData.data.id)) || "OK";
-        sentFolios.push(folio);
-        markAssetCompletedPermanently(ev.asset_id, ev.unique_id);
-        successCount++;
+
+        // Extraer folio / id oficial de Linkaform
+        let folio = null;
+        if (resData && typeof resData === "object") {
+          if (resData.error || resData.errors || resData.status === "error" || resData.success === false) {
+            folio = null;
+          } else {
+            folio = resData.folio || 
+                    (resData.response && resData.response.folio) || 
+                    (resData.data && resData.data.folio) ||
+                    resData.id || 
+                    (resData.response && resData.response.id) || 
+                    (resData.data && resData.data.id) ||
+                    resData.answers_id;
+          }
+        }
+
+        // REGLA OBLIGATORIA: Si Linkaform NO regresa un folio o ID válido, el registro NO se elimina del teléfono
+        const hasValidFolio = folio !== null && folio !== undefined && 
+                              String(folio).trim() !== "" && 
+                              String(folio).toUpperCase() !== "OK" && 
+                              String(folio).toUpperCase() !== "N/A" && 
+                              String(folio) !== "0";
+
+        if (hasValidFolio) {
+          sentFolios.push(String(folio));
+          markAssetCompletedPermanently(ev.asset_id, ev.unique_id);
+          successCount++;
+          console.log(`[Linkaform] Folio confirmado exitosamente: ${folio} para ${ev.asset_id}`);
+        } else {
+          console.warn(`[Linkaform] Sin folio confirmado para ${ev.asset_id}. Se conserva en el teléfono. Respuesta:`, resText);
+          remainingEvidences.push(ev);
+          lastErrorMessage = `Linkaform no confirmó folio para ${ev.asset_id}: ${resText.substring(0, 100)}`;
+        }
       } else {
         remainingEvidences.push(ev);
         lastErrorMessage = `Respuesta Linkaform (HTTP ${response.status}): ${resText.substring(0, 100)}`;
@@ -2661,28 +2822,66 @@ async function syncAllToLinkaform() {
       isNetworkFailure = true;
       forceOfflineState = true;
       updateOfflineStatus(true);
-      lastErrorMessage = e.message || "Failed to fetch";
+      lastErrorMessage = e.message || "Fallo de conexión";
+    }
+
+    // Pausa de 250ms entre registros para proteger la conexión móvil de saturación
+    if (i < total - 1) {
+      await new Promise(r => setTimeout(r, 250));
     }
   }
 
+  // Guardar en el teléfono: únicamente se conservan los registros que NO obtuvieron folio
   dbEvidences = remainingEvidences;
-  saveEvidencesToStorage();
+  await saveEvidencesToStorage();
   renderSavedEvidences();
   applyHierarchyFilter();
 
-  if (btn) btn.innerText = "🚀 Enviar Todo a Linkaform";
+  isSyncingToLinkaform = false;
+  if (btn) {
+    btn.disabled = false;
+    btn.style.opacity = "1";
+    btn.innerText = "🚀 Enviar Todo a Linkaform";
+  }
 
-  if (successCount === 0) {
-    if (isNetworkFailure || !navigator.onLine || forceOfflineState) {
-      updateOfflineStatus(true);
-      alert("⚠️ No se pudo enviar ningún registro porque estás en Modo Offline. Intenta nuevamente cuando tengas red de datos o Wi-Fi.");
+  // Feedback detallado y seguro al técnico
+  if (remainingEvidences.length > 0) {
+    if (successCount > 0) {
+      showCustomAlert(
+        `⚠️ <strong>Sincronización Parcial:</strong><br><br>` +
+        `✅ <strong>Subidos con Folio Confirmado:</strong> ${successCount} registro(s).<br>` +
+        `📱 <strong>Guardados en este Teléfono:</strong> ${remainingEvidences.length} registro(s) pendientes para volver a enviar.<br><br>` +
+        `<strong>Folios Generados:</strong><br><small style="word-break:break-all;">${sentFolios.slice(0, 5).join(", ")}${sentFolios.length > 5 ? ' y más...' : ''}</small><br><br>` +
+        `<strong>Detalle de red / respuesta:</strong><br><small>${lastErrorMessage || "Conexión móvil inestable en campo"}</small><br><br>` +
+        `<em>Tus registros pendientes están 100% seguros en el teléfono. Presiona nuevamente "Enviar Todo a Linkaform" para continuar.</em>`,
+        "Sincronización Parcial"
+      );
     } else {
-      alert("❌ No se pudo enviar ningún registro a Linkaform (" + (lastErrorMessage || "Error desconocido") + ").");
+      if (isNetworkFailure || !navigator.onLine || forceOfflineState) {
+        updateOfflineStatus(true);
+        showCustomAlert(
+          `⚠️ <strong>Modo Offline o Sin Conexión:</strong><br><br>` +
+          `No se pudo conectar con el servidor de Linkaform.<br><br>` +
+          `Tus <strong>${remainingEvidences.length} registros</strong> están 100% seguros guardados en este teléfono.<br><br>` +
+          `Intenta nuevamente cuando tengas señal de datos o Wi-Fi.`,
+          "Sin Conexión"
+        );
+      } else {
+        showCustomAlert(
+          `❌ <strong>No se pudo confirmar ningún registro en Linkaform:</strong><br><br>` +
+          `Los <strong>${remainingEvidences.length} registros</strong> se conservaron en el teléfono para que no se pierda nada.<br><br>` +
+          `<strong>Detalle del error:</strong><br><small>${lastErrorMessage || "Error desconocido"}</small>`,
+          "Error de Envío"
+        );
+      }
     }
   } else {
-    const foliosStr = sentFolios.join(", ");
-    const regLabel = successCount === 1 ? "1 registro exitosamente" : `${successCount} registros exitosamente`;
-    alert(`✅ Se envió ${regLabel} Folio: ${foliosStr}`);
+    showCustomAlert(
+      `✅ <strong>¡Sincronización Exitosa al 100%!</strong><br><br>` +
+      `Se subieron y confirmaron los <strong>${successCount}</strong> registros exitosamente en Linkaform.<br><br>` +
+      `<strong>Folios Oficiales Generados:</strong><br><small style="word-break:break-all;">${sentFolios.join(", ")}</small>`,
+      "Sincronización Exitosa"
+    );
   }
 }
 
@@ -2813,12 +3012,29 @@ function takeSnapshot() {
   }
 
   const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const MAX_WIDTH = 1080;
+  const MAX_HEIGHT = 1080;
+  let width = video.videoWidth;
+  let height = video.videoHeight;
 
-  const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.75);
+  if (width > height) {
+    if (width > MAX_WIDTH) {
+      height *= MAX_WIDTH / width;
+      width = MAX_WIDTH;
+    }
+  } else {
+    if (height > MAX_HEIGHT) {
+      width *= MAX_HEIGHT / height;
+      height = MAX_HEIGHT;
+    }
+  }
+
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, width, height);
+
+  const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.68);
 
   if (currentTargetPhotoType === 'Antes') {
     photoAntesBase64 = compressedDataUrl;
