@@ -15,6 +15,31 @@ let modalSelectedModel = "";
 let userContratista = "";
 let userTecnico = "";
 
+// Versión del Sistema para Auditoría Linkaform (Automática para Campo)
+const CURRENT_APP_VERSION_ANDROID = "v4 - Android";
+const CURRENT_APP_VERSION_IPHONE = "V4 - IPhone";
+
+function getAppVersionString() {
+  try {
+    if (typeof window !== "undefined" && typeof window.AndroidBridge !== "undefined") {
+      return CURRENT_APP_VERSION_ANDROID;
+    }
+    const ua = (typeof navigator !== "undefined" && navigator.userAgent) ? navigator.userAgent.toLowerCase() : "";
+    const isIPhone = /iphone|ipad|ipod/.test(ua) || (typeof navigator !== "undefined" && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isAndroid = /android/.test(ua);
+    
+    if (isAndroid) {
+      return CURRENT_APP_VERSION_ANDROID;
+    }
+    if (isIPhone) {
+      return CURRENT_APP_VERSION_IPHONE;
+    }
+    return /mac/.test(ua) ? CURRENT_APP_VERSION_IPHONE : CURRENT_APP_VERSION_ANDROID;
+  } catch (e) {
+    return CURRENT_APP_VERSION_ANDROID;
+  }
+}
+
 // Catálogo Visual de Modelos para Casetas y Cajas
 const CASETA_MODELS = [
   { id: "NORMAL", title: "Normal", img: "assets/types/caseta_normal.jpg" },
@@ -2247,6 +2272,7 @@ function saveEvidence(event) {
     gps_captura_lon: gpsLon,
     gps_precision_m: gpsAccuracy,
     
+    version_app: getAppVersionString(),
     fecha_captura: timestamp
   };
 
@@ -2684,7 +2710,8 @@ async function syncAllToLinkaform() {
     tipo_trabajo: "6ab9cdfec4fc804d8c8e088c",
     modelo_caja_caseta: "6ab9d647dba7a0c191e6a0f6",
     contratista: "6abe9357bef08742fcf94020",
-    tecnico: "6abe9357bef08742fcf94021"
+    tecnico: "6abe9357bef08742fcf94021",
+    version: "6adaa11601dfe84563e2253b"
   };
 
   let successCount = 0;
@@ -2717,6 +2744,7 @@ async function syncAllToLinkaform() {
     const modelo_val = String(ev.modelo_tipo || (ev.tipo_elemento === "CASETA" ? "NORMAL" : "Tradicional Sencilla"));
     const contratista_val = String(ev.contratista || userContratista || "N/A");
     const tecnico_val = String(ev.tecnico || userTecnico || "N/A");
+    const version_val = String(ev.version_app || getAppVersionString());
 
     const isManual = ev.is_manual === true || ev.is_fuera_catalogo === true || ev.existe_en_bd === "No" || String(ev.unique_id || "").includes("MANUAL") || String(ev.asset_id || "").includes("MANUAL");
     const existeEnBdVal = isManual ? "No" : "Sí";
@@ -2739,7 +2767,8 @@ async function syncAllToLinkaform() {
       [LINKAFORM_FIELDS.tipo_trabajo]: tipo_trabajo_val,
       [LINKAFORM_FIELDS.modelo_caja_caseta]: modelo_val,
       [LINKAFORM_FIELDS.contratista]: contratista_val,
-      [LINKAFORM_FIELDS.tecnico]: tecnico_val
+      [LINKAFORM_FIELDS.tecnico]: tecnico_val,
+      [LINKAFORM_FIELDS.version]: version_val
     };
 
     // Subir Foto DESPUÉS
