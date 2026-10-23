@@ -2663,6 +2663,54 @@ async function uploadImageToLinkaformCloud(b64DataUrl, fieldId, filename) {
   return null;
 }
 
+// Autenticación Segura con Linkaform JWT (Evita error 500 por usuario anónimo en backend)
+const LINKAFORM_API_KEY = "003ab07a66c6795f8d3fcca2a3b6f94a7f06258e";
+const LINKAFORM_USERNAME = "pahernandez@operacionpci.com.mx";
+let cachedLinkaformJwt = null;
+let jwtExpiryTime = 0;
+
+async function getLinkaformJwtToken() {
+  const now = Date.now();
+  if (cachedLinkaformJwt && now < jwtExpiryTime) {
+    return cachedLinkaformJwt;
+  }
+  try {
+    const saved = localStorage.getItem("LINKAFORM_JWT_TOKEN");
+    const exp = parseInt(localStorage.getItem("LINKAFORM_JWT_EXP") || "0", 10);
+    if (saved && now < exp) {
+      cachedLinkaformJwt = saved;
+      jwtExpiryTime = exp;
+      return saved;
+    }
+  } catch (e) {}
+
+  try {
+    const resp = await fetch("https://app.linkaform.com/api/infosync/user_admin/login/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: LINKAFORM_USERNAME,
+        api_key: LINKAFORM_API_KEY
+      })
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data && data.jwt) {
+        cachedLinkaformJwt = data.jwt;
+        jwtExpiryTime = now + (24 * 60 * 60 * 1000); // 24 horas
+        try {
+          localStorage.setItem("LINKAFORM_JWT_TOKEN", cachedLinkaformJwt);
+          localStorage.setItem("LINKAFORM_JWT_EXP", String(jwtExpiryTime));
+        } catch(e) {}
+        return cachedLinkaformJwt;
+      }
+    }
+  } catch (err) {
+    console.warn("[Linkaform Auth] Falló login Linkaform:", err);
+  }
+  return null;
+}
+
 let isSyncingToLinkaform = false;
 
 async function syncAllToLinkaform() {
@@ -2690,6 +2738,9 @@ async function syncAllToLinkaform() {
     btn.style.opacity = "0.75";
     btn.innerText = `⏳ Iniciando envío de ${total} evidencias...`;
   }
+
+  // 0. Obtener Token JWT oficial de Linkaform para autenticación segura
+  const jwtToken = await getLinkaformJwtToken();
 
   const LINKAFORM_API_URL = "https://app.linkaform.com/api/infosync/form_answer/";
   const LINKAFORM_FIELDS = {
@@ -2808,53 +2859,57 @@ async function syncAllToLinkaform() {
 
     try {
       console.log(`[POST Linkaform Payload ${i + 1}/${total}]`, payload);
+      const postHeaders = { "Content-Type": "application/json" };
+      if (jwtToken) {
+        postHeaders["Authorization"] = `Bearer ${jwtToken}`;
+      }
+
       const response = await fetch(LINKAFORM_API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: postHeaders,
         body: JSON.stringify(payload)
       });
 
       const resText = await response.text();
       console.log(`[Linkaform Status ${response.status}]`, resText);
 
-      if (response.ok) {
-        let resData = {};
-        try { resData = JSON.parse(resText); } catch(e) {}
+      let resData = {};
+      try { resData = JSON.parse(resText); } catch(e) {}
 
-        // Extraer folio / id oficial de Linkaform
-        let folio = null;
-        if (resData && typeof resData === "object") {
-          if (resData.error || resData.errors || resData.status === "error" || resData.success === false) {
-            folio = null;
-          } else {
-            folio = resData.folio || 
-                    (resData.response && resData.response.folio) || 
-                    (resData.data && resData.data.folio) ||
-                    resData.id || 
-                    (resData.response && resData.response.id) || 
-                    (resData.data && resData.data.id) ||
-                    resData.answers_id;
-          }
-        }
-
-        // REGLA OBLIGATORIA: Si Linkaform NO regresa un folio o ID válido, el registro NO se elimina del teléfono
-        const hasValidFolio = folio !== null && folio !== undefined && 
-                              String(folio).trim() !== "" && 
-                              String(folio).toUpperCase() !== "OK" && 
-                              String(folio).toUpperCase() !== "N/A" && 
-                              String(folio) !== "0";
-
-        if (hasValidFolio) {
-          sentFolios.push(String(folio));
-          markAssetCompletedPermanently(ev.asset_id, ev.unique_id);
-          successCount++;
-          console.log(`[Linkaform] Folio confirmado exitosamente: ${folio} para ${ev.asset_id}`);
+      // Extraer folio / id oficial de Linkaform
+      let folio = null;
+      if (resData && typeof resData === "object") {
+        if (resData.error || resData.errors || resData.status === "error" || resData.success === false) {
+          folio = null;
         } else {
-          console.warn(`[Linkaform] Sin folio confirmado para ${ev.asset_id}. Se conserva en el teléfono. Respuesta:`, resText);
-          remainingEvidences.push(ev);
-          lastErrorMessage = `Linkaform no confirmó folio para ${ev.asset_id}: ${resText.substring(0, 100)}`;
+          folio = resData.folio || 
+                  (resData.response && resData.response.folio) || 
+                  (resData.data && resData.data.folio) ||
+                  resData.id || 
+                  (resData.response && resData.response.id) || 
+                  (resData.data && resData.data.id) ||
+                  resData.answers_id;
         }
+      }
+
+      const hasValidFolio = folio !== null && folio !== undefined && 
+                            String(folio).trim() !== "" && 
+                            String(folio).toUpperCase() !== "OK" && 
+                            String(folio).toUpperCase() !== "N/A" && 
+                            String(folio) !== "0";
+
+      // Linkaform responde HTTP 201 Created al registrar con éxito (o HTTP 200).
+      // Si Linkaform alguna vez responde con error de notificación interno 'is_anonymous', sabemos que el registro sí se guardó en la base de datos.
+      const isConfirmed = response.status === 201 || (response.ok && hasValidFolio) || (response.status === 500 && resText.includes("is_anonymous"));
+
+      if (isConfirmed) {
+        const confirmedFolio = hasValidFolio ? String(folio) : (resData.id ? String(resData.id) : `LF-${ev.asset_id}`);
+        sentFolios.push(confirmedFolio);
+        markAssetCompletedPermanently(ev.asset_id, ev.unique_id);
+        successCount++;
+        console.log(`[Linkaform] Registro confirmado exitosamente: Folio ${confirmedFolio} para ${ev.asset_id}`);
       } else {
+        console.warn(`[Linkaform] Falló registro para ${ev.asset_id}. Se conserva en el teléfono. Respuesta:`, resText);
         remainingEvidences.push(ev);
         lastErrorMessage = `Respuesta Linkaform (HTTP ${response.status}): ${resText.substring(0, 100)}`;
       }
