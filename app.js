@@ -25,18 +25,14 @@ function getAppVersionString() {
       return CURRENT_APP_VERSION_ANDROID;
     }
     const ua = (typeof navigator !== "undefined" && navigator.userAgent) ? navigator.userAgent.toLowerCase() : "";
-    const isIPhone = /iphone|ipad|ipod/.test(ua) || (typeof navigator !== "undefined" && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const isAndroid = /android/.test(ua);
-    
     if (isAndroid) {
       return CURRENT_APP_VERSION_ANDROID;
     }
-    if (isIPhone) {
-      return CURRENT_APP_VERSION_IPHONE;
-    }
-    return /mac/.test(ua) ? CURRENT_APP_VERSION_IPHONE : CURRENT_APP_VERSION_ANDROID;
+    // iPhone, iPad, Safari, Mac, Web Remoto
+    return CURRENT_APP_VERSION_IPHONE;
   } catch (e) {
-    return CURRENT_APP_VERSION_ANDROID;
+    return CURRENT_APP_VERSION_IPHONE;
   }
 }
 
@@ -2272,7 +2268,7 @@ function saveEvidence(event) {
     gps_captura_lon: gpsLon,
     gps_precision_m: gpsAccuracy,
     
-    version_app: getAppVersionString(),
+    version_app: getAppVersionString() || CURRENT_APP_VERSION_IPHONE,
     fecha_captura: timestamp
   };
 
@@ -2795,7 +2791,7 @@ async function syncAllToLinkaform() {
     const modelo_val = String(ev.modelo_tipo || (ev.tipo_elemento === "CASETA" ? "NORMAL" : "Tradicional Sencilla"));
     const contratista_val = String(ev.contratista || userContratista || "N/A");
     const tecnico_val = String(ev.tecnico || userTecnico || "N/A");
-    const version_val = String(ev.version_app || getAppVersionString());
+    const version_val = String(ev.version_app || getAppVersionString() || CURRENT_APP_VERSION_IPHONE);
 
     const isManual = ev.is_manual === true || ev.is_fuera_catalogo === true || ev.existe_en_bd === "No" || String(ev.unique_id || "").includes("MANUAL") || String(ev.asset_id || "").includes("MANUAL");
     const existeEnBdVal = isManual ? "No" : "Sí";
@@ -2819,7 +2815,8 @@ async function syncAllToLinkaform() {
       [LINKAFORM_FIELDS.modelo_caja_caseta]: modelo_val,
       [LINKAFORM_FIELDS.contratista]: contratista_val,
       [LINKAFORM_FIELDS.tecnico]: tecnico_val,
-      [LINKAFORM_FIELDS.version]: version_val
+      [LINKAFORM_FIELDS.version]: version_val,
+      "6adaa11601dfe84563e2253b": version_val
     };
 
     // Subir Foto DESPUÉS

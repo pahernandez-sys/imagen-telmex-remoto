@@ -4,9 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Telmex 2026 - Carga Remota</title>
-  <link rel="stylesheet" href="styles.css?v=5.0">
+  <link rel="stylesheet" href="styles.css?v=5.1">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0055a5">
+  <script>
+    // Limpieza automática preventiva de Service Worker y Caché para garantizar última versión en iPhone/Safari
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        for (var r of regs) r.unregister();
+      });
+    }
+  </script>
 </head>
 <body>
 
@@ -15,7 +23,7 @@
     <div class="header-top">
       <div class="brand-title" style="display:flex; flex-direction:column; line-height:1.2;">
         <span style="font-size:1.02rem; font-weight:800; display:flex; align-items:center; gap:5px;">
-          📦 Telmex 2026 <span style="font-size:0.68rem; background:#10b981; color:white; padding:1px 6px; border-radius:4px; font-weight:bold;">v5</span> <span style="font-size:0.68rem; background:rgba(255,255,255,0.25); padding:1px 6px; border-radius:4px; font-weight:700;">REMOTO</span>
+          📦 Telmex 2026 <span id="headerAppVersionBadge" style="font-size:0.68rem; background:#10b981; color:white; padding:1px 6px; border-radius:4px; font-weight:bold;">v5 - IPhone</span> <span style="font-size:0.68rem; background:rgba(255,255,255,0.25); padding:1px 6px; border-radius:4px; font-weight:700;">REMOTO</span>
           <button type="button" onclick="forceAppUpdate()" title="Recargar a v5 y Limpiar Caché" style="background:rgba(255,255,255,0.2); color:white; border:none; padding:1px 6px; border-radius:4px; font-size:0.75rem; cursor:pointer;">🔄</button>
         </span>
         <span style="font-size:0.7rem; font-weight:normal; opacity:0.9;">Carga Autorizada (Sin GPS)</span>
@@ -702,6 +710,6 @@
   <script src="data/catalog_part2.js"></script>
 
   <!-- Lógica de la PWA (Carga asíncrona de datos para 0 latencia) -->
-  <script src="app.js?v=5.0"></script>
+  <script src="app.js?v=5.1"></script>
 </body>
 </html>
