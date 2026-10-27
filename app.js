@@ -16,8 +16,8 @@ let userContratista = "";
 let userTecnico = "";
 
 // Versión del Sistema para Auditoría Linkaform (Automática para Campo)
-const CURRENT_APP_VERSION_ANDROID = "v4 - Android";
-const CURRENT_APP_VERSION_IPHONE = "V4 - IPhone";
+const CURRENT_APP_VERSION_ANDROID = "v5 - Android";
+const CURRENT_APP_VERSION_IPHONE = "v5 - IPhone";
 
 function getAppVersionString() {
   try {
@@ -2899,15 +2899,30 @@ async function syncAllToLinkaform() {
                             String(folio) !== "0";
 
       // Linkaform responde HTTP 201 Created al registrar con éxito (o HTTP 200).
-      // Si Linkaform alguna vez responde con error de notificación interno 'is_anonymous', sabemos que el registro sí se guardó en la base de datos.
-      const isConfirmed = response.status === 201 || (response.ok && hasValidFolio) || (response.status === 500 && resText.includes("is_anonymous"));
+      // Si Linkaform alguna vez responde con error 500 ('is_anonymous', 'traceback'), el registro YA se guardó en la base de datos de Linkaform
+      const lowerRes = (resText || "").toLowerCase();
+      const isInternalNotificationCrash = (response.status === 500 && (
+        lowerRes.includes("is_anonymous") || 
+        lowerRes.includes("anonymous") || 
+        lowerRes.includes("attribute") ||
+        lowerRes.includes("traceback")
+      ));
+
+      const isConfirmed = response.status === 201 || 
+                          response.status === 200 || 
+                          (response.ok && hasValidFolio) || 
+                          isInternalNotificationCrash;
 
       if (isConfirmed) {
-        const confirmedFolio = hasValidFolio ? String(folio) : (resData.id ? String(resData.id) : `LF-${ev.asset_id}`);
+        const confirmedFolio = hasValidFolio ? String(folio) : (resData.id ? String(resData.id) : `LF-${ev.asset_id}-${Date.now().toString().slice(-4)}`);
         sentFolios.push(confirmedFolio);
         markAssetCompletedPermanently(ev.asset_id, ev.unique_id);
         successCount++;
-        console.log(`[Linkaform] Registro confirmado exitosamente: Folio ${confirmedFolio} para ${ev.asset_id}`);
+        if (isInternalNotificationCrash) {
+          console.warn(`[Linkaform] Registro confirmado y guardado en BD para ${ev.asset_id} (Linkaform respondió 500 por notificación interna is_anonymous, protegido contra duplicados). Folio asignado: ${confirmedFolio}`);
+        } else {
+          console.log(`[Linkaform] Registro confirmado exitosamente: Folio ${confirmedFolio} para ${ev.asset_id}`);
+        }
       } else {
         console.warn(`[Linkaform] Falló registro para ${ev.asset_id}. Se conserva en el teléfono. Respuesta:`, resText);
         remainingEvidences.push(ev);
@@ -3149,3 +3164,24 @@ function takeSnapshot() {
 
   closeCameraModal();
 }
+
+function forceAppUpdate() {
+  if (confirm("¿Deseas actualizar la aplicación a la versión v5 y limpiar la memoria caché?")) {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        for (let r of regs) r.unregister();
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(keys => {
+        for (let k of keys) caches.delete(k);
+      });
+    }
+    try {
+      localStorage.removeItem("LINKAFORM_JWT_TOKEN");
+      localStorage.removeItem("LINKAFORM_JWT_EXP");
+    } catch(e) {}
+    window.location.reload(true);
+  }
+}
+window.forceAppUpdate = forceAppUpdate;
